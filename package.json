@@ -1,0 +1,39 @@
+{
+  "name": "sveltekit-event-mock",
+  "version": "0.1.0",
+  "description": "Ergonomic event mocking for SvelteKit server-side testing",
+  "keywords": [
+    "sveltekit",
+    "svelte",
+    "testing",
+    "mock",
+    "vitest",
+    "unit-test",
+    "server"
+  ],
+  "license": "MIT",
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "lint": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@sveltejs/kit": "^2.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/kit": "^2.53.4",
+    "typescript": "^5.9.3"
+  }
+}
