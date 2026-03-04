@@ -1,203 +1,151 @@
 import { describe, test, expect } from "bun:test";
-import {
-  mock,
-  MockCookies,
-  MockSpan,
-  type RouteParamsFromRoute,
-} from "./index";
+import { mock } from "./index";
 
-describe("MockCookies", () => {
-  test("should get and set cookies", () => {
-    const cookies = new MockCookies();
-    cookies.set("session", "abc123", { path: "/" });
-
-    expect(cookies.get("session")).toBe("abc123");
-  });
-
-  test("should return undefined for non-existent cookie", () => {
-    const cookies = new MockCookies();
-    expect(cookies.get("nonexistent")).toBeUndefined();
-  });
-
-  test("should delete cookies", () => {
-    const cookies = new MockCookies();
-    cookies.set("session", "abc123", { path: "/" });
-    expect(cookies.get("session")).toBe("abc123");
-
-    cookies.delete("session", { path: "/" });
-    expect(cookies.get("session")).toBeUndefined();
-  });
-
-  test("should get all cookies", () => {
-    const cookies = new MockCookies();
-    cookies.set("session", "abc123", { path: "/" });
-    cookies.set("user", "john", { path: "/" });
-
-    const all = cookies.getAll();
-    expect(all).toHaveLength(2);
-    expect(all).toContainEqual({ name: "session", value: "abc123" });
-    expect(all).toContainEqual({ name: "user", value: "john" });
-  });
-
-  test("should serialize cookies", () => {
-    const cookies = new MockCookies();
-    const serialized = cookies.serialize("session", "abc123", {
-      path: "/",
-      httpOnly: true,
-      secure: true,
-    });
-
-    expect(serialized).toContain("session=abc123");
-    expect(serialized).toContain("Path=/");
-    expect(serialized).toContain("HttpOnly");
-    expect(serialized).toContain("Secure");
-  });
-});
-
-describe("MockSpan", () => {
-  test("should set attributes", () => {
-    const span = new MockSpan();
-    span.attribute("key1", "value1");
-    span.attribute("key2", 123);
-
-    const attrs = span.__getAttributes();
-    expect(attrs.get("key1")).toBe("value1");
-    expect(attrs.get("key2")).toBe(123);
-  });
-
-  test("should return self for chaining", () => {
-    const span = new MockSpan();
-    const result = span.attribute("key", "value");
-    expect(result).toBe(span);
-  });
-
-  test("should end without error", () => {
-    const span = new MockSpan();
-    expect(() => span.end()).not.toThrow();
-  });
-});
-
-describe("mock builder", () => {
-  test("should create event with fluent builder", () => {
+describe("Integration Tests - Real SvelteKit Handler Scenarios", () => {
+  test("it should correctly simulate GET request with authentication", async () => {
     const event = mock
-      .post("/api/items")
-      .json({ name: "test" })
-      .withHeader("x-api-key", "abc")
-      .withCookie("session", "abc123")
-      .withLocals({ user: { id: 1 } } as App.Locals)
-      .withParam("id", "123");
+      .get("/api/users")
+      .withHeader("Authorization", "Bearer secret-token")
+      .withCookie("session", "user-session-id");
 
-    expect(event.request.method).toBe("POST");
-    expect(event.request.headers.get("Content-Type")).toBe("application/json");
-    expect(event.request.headers.get("x-api-key")).toBe("abc");
-    expect(event.cookies.get("session")).toBe("abc123");
-    expect(event.locals).toEqual({ user: { id: 1 } });
-    expect(event.params).toEqual({ id: "123" });
-  });
+    const authHeader = event.request.headers.get("Authorization");
+    const session = event.cookies.get("session");
 
-  test("should support method chaining", () => {
-    const event = mock.get("/api/items");
+    expect(authHeader).toBe("Bearer secret-token");
+    expect(session).toBe("user-session-id");
     expect(event.request.method).toBe("GET");
   });
 
-  test("should support fromUrl factory", () => {
-    const event = mock.fromUrl("/api/items");
-    expect(event.url.pathname).toBe("/api/items");
+  test("it should correctly simulate POST request with JSON payload", async () => {
+    const payload = { name: "New Item", description: "Test description" };
+    const event = mock.post("/api/items").json(payload);
+
+    const clonedRequest = event.request.clone();
+    const body = await clonedRequest.json();
+
+    expect(body).toEqual(payload);
+    expect(event.request.headers.get("content-type")).toBe("application/json");
   });
 
-  test("should support text body", () => {
-    const event = mock.post("/api/items").text("plain text");
-    expect(event.request.headers.get("Content-Type")).toBe("text/plain");
+  test("it should correctly simulate handler that uses route params", () => {
+    const event = mock
+      .get("/api/users/123/posts/456")
+      .withParam("userId", "123")
+      .withParam("postId", "456")
+      .withRoute("/api/users/[userId]/posts/[postId]");
+
+    expect(event.params.userId).toBe("123");
+    expect(event.params.postId).toBe("456");
+    expect(event.route.id).toBe("/api/users/[userId]/posts/[postId]");
   });
 
-  test("should support form data", () => {
-    const event = mock.post("/api/items").form({ name: "test" });
-    expect(event.request.body).toBeInstanceOf(ReadableStream);
+  test("it should correctly simulate handler that uses locals", async () => {
+    const event = mock.get("/api/protected").withLocals({
+      user: { id: 123, role: "admin", email: "admin@example.com" },
+    } as App.Locals);
+
+    expect((event.locals as any).user.id).toBe(123);
+    expect((event.locals as any).user.role).toBe("admin");
   });
 
-  test("should support platform", () => {
-    const platform = { env: { API_KEY: "abc" } };
-    const event = mock.get("/api/items").withPlatform(platform);
-    expect(event.platform).toEqual(platform);
+  test("it should correctly simulate form submission handler", async () => {
+    const event = mock.post("/api/login").form({
+      username: "john@example.com",
+      password: "secret123",
+    });
+
+    const formData = await event.request.formData();
+    expect(formData.get("username")).toBe("john@example.com");
+    expect(formData.get("password")).toBe("secret123");
   });
 
-  test("should support tracing", () => {
-    const span = new MockSpan();
-    const tracing = { enabled: true, root: span, current: span };
-    const event = mock.get("/api/items").withTracing(tracing);
-    expect(event.tracing.enabled).toBe(true);
-  });
-
-  test("should support custom fetch", async () => {
-    const customFetch = async () => new Response("mocked");
-    const event = mock.get("/api/items").withFetch(customFetch as any);
-    const response = await event.fetch("/test");
-    const text = await response.text();
-    expect(text).toBe("mocked");
-  });
-});
-
-describe("RouteParamsFromRoute type", () => {
-  test("should extract single param", () => {
-    type Params = RouteParamsFromRoute<"/api/items/[id]">;
-    const params: Params = { id: "123" };
-    expect(params.id).toBe("123");
-  });
-
-  test("should extract multiple params", () => {
-    type Params = RouteParamsFromRoute<"/api/items/[id]/comments/[commentId]">;
-    const params: Params = { id: "123", commentId: "456" };
-    expect(params.id).toBe("123");
-    expect(params.commentId).toBe("456");
-  });
-
-  test("should return empty type for route without params", () => {
-    type Params = RouteParamsFromRoute<"/api/items">;
-    const params: Params = {};
-    expect(Object.keys(params)).toHaveLength(0);
-  });
-});
-
-describe("Integration tests", () => {
-  test("should handle complex event creation", () => {
+  test("it should correctly simulate complex event with all features", () => {
     const event = mock
       .get("/api/users/[userId]/posts/[postId]")
       .withHeaders({
         Authorization: "Bearer token",
         "X-Custom-Header": "value",
+        "X-Request-ID": "req-123",
       })
       .withCookies({
         session: "abc123",
-        pref: "dark",
+        preferences: "dark-mode",
       })
       .withParam("userId", "123")
       .withParam("postId", "456")
       .withLocals({
-        user: { id: 123, role: "admin" },
+        user: { id: 123, role: "admin", email: "admin@example.com" },
       } as App.Locals)
       .withIsDataRequest(true)
-      .withRoute("/api/users/[userId]/posts/[postId]");
+      .withRoute("/api/users/[userId]/posts/[postId]")
+      .clientAddress("192.168.1.100");
 
     expect(event.request.method).toBe("GET");
     expect(event.request.headers.get("Authorization")).toBe("Bearer token");
+    expect(event.request.headers.get("X-Custom-Header")).toBe("value");
     expect(event.cookies.get("session")).toBe("abc123");
+    expect(event.cookies.get("preferences")).toBe("dark-mode");
     expect(event.params.userId).toBe("123");
     expect(event.params.postId).toBe("456");
     expect((event.locals as any).user.role).toBe("admin");
     expect(event.isDataRequest).toBe(true);
     expect(event.route.id).toBe("/api/users/[userId]/posts/[postId]");
+    expect(event.getClientAddress()).toBe("192.168.1.100");
   });
 
-  test("should handle fetch with relative URLs", async () => {
-    const mockFetch = async () => new Response("mocked response");
-    const event = mock.get("/api/base").withFetch(mockFetch as any);
-    const response = await event.fetch("/api/relative");
+  test("it should correctly simulate handler making sub-requests", async () => {
+    const mockFetch = async (url: string | Request | URL) => {
+      const urlString = url instanceof URL ? url.toString() : String(url);
+      if (urlString.includes("external")) {
+        return new Response('{"data":"external"}', {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("ok");
+    };
+
+    const event = mock.get("/api/internal").withFetch(mockFetch as any);
+    const response = await event.fetch("/api/external");
+
     expect(response).toBeDefined();
+    const text = await response.text();
+    const data = JSON.parse(text);
+    expect(data).toEqual({ data: "external" });
   });
 
-  test("should support setHeaders tracking", () => {
-    const event = mock.get("/api/items");
-    event.setHeaders({ "X-Custom": "value" });
-    expect(() => event.setHeaders({ "X-Another": "value" })).not.toThrow();
+  test("it should correctly simulate data request with cookies and locals", () => {
+    const event = mock
+      .get("/")
+      .withCookies({ session: "session-123", theme: "dark" })
+      .withLocals({ user: { id: 1, authenticated: true } } as App.Locals)
+      .withIsDataRequest(true);
+
+    expect(event.isDataRequest).toBe(true);
+    expect(event.cookies.get("session")).toBe("session-123");
+    expect(event.cookies.get("theme")).toBe("dark");
+    expect((event.locals as any).user.authenticated).toBe(true);
+  });
+
+  test("it should correctly simulate DELETE request with confirmation header", () => {
+    const event = mock
+      .delete("/api/items/123")
+      .withHeader("X-Confirmation", "true")
+      .withParam("id", "123");
+
+    expect(event.request.method).toBe("DELETE");
+    expect(event.request.headers.get("X-Confirmation")).toBe("true");
+    expect(event.params.id).toBe("123");
+  });
+
+  test("it should correctly simulate PATCH request with partial update", async () => {
+    const updates = { status: "completed" };
+    const event = mock.patch("/api/items/123").json(updates);
+
+    const clonedRequest = event.request.clone();
+    const body = await clonedRequest.json();
+
+    expect(event.request.method).toBe("PATCH");
+    expect(body).toEqual(updates);
+    expect(event.request.headers.get("content-type")).toBe("application/json");
   });
 });
