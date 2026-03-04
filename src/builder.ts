@@ -1,19 +1,26 @@
 import type { Cookies, RequestEvent } from "@sveltejs/kit";
 import type { CookieSerializeOptions } from "cookie";
-import type { BodyInit, RequestInfo, RouteParams, Span, Tracing } from "./types";
+import type {
+  BodyInit,
+  RequestInfo,
+  RouteParams,
+  Span,
+  Tracing,
+} from "./types";
 import { MockCookies } from "./cookies";
 import { MockSpan } from "./span";
 import { validateParamKey, validateParamValue } from "./validation";
+import type { RouteId as KitRouteId } from "$app/types";
 
 export type MockRequestEventBuilder<
   Params extends RouteParams = RouteParams,
-  RouteId extends string | null = string | null,
+  RouteId extends KitRouteId | null = KitRouteId | null,
 > = MockRequestEventBuilderBase<Params, RouteId> &
   RequestEvent<Params, RouteId>;
 
 export class MockRequestEventBuilderBase<
   Params extends RouteParams = RouteParams,
-  RouteId extends string | null = string | null,
+  RouteId extends KitRouteId | null = KitRouteId | null,
 > {
   private _method:
     | "GET"
