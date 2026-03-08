@@ -10,7 +10,7 @@ import type {
 import { MockCookies } from "./cookies";
 import { MockSpan } from "./span";
 import { validateParamKey, validateParamValue } from "./validation";
-import type { RouteId as KitRouteId } from "$app/types";
+import type { RouteId as KitRouteId, AppTypes } from "$app/types";
 
 export type MockRequestEventBuilder<
   Params extends RouteParams = RouteParams,
@@ -262,7 +262,7 @@ export class MockRequestEventBuilderBase<
   }
 
   get locals(): App.Locals {
-    return this._locals as App.Locals;
+    return this._locals as unknown as App.Locals; // cast to unknown first because in a real app it throws a type error
   }
 
   get platform(): App.Platform | undefined {
