@@ -1,6 +1,6 @@
 {
   "name": "sveltekit-event-mock",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Ergonomic event mocking for SvelteKit server-side testing",
   "keywords": [
     "sveltekit",
