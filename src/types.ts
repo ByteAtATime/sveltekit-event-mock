@@ -1,12 +1,15 @@
-export type BodyInit = ReadableStream | Blob | ArrayBuffer | FormData | string | null;
+export type BodyInit =
+  | ReadableStream
+  | Blob
+  | ArrayBuffer
+  | FormData
+  | string
+  | null;
 export type RequestInfo = string | Request;
 
 export type RouteParams = Record<string, string>;
 
-export type Span = {
-  attribute(key: string, value: unknown): Span;
-  end(): void;
-};
+export type Span = import("@opentelemetry/api").Span;
 
 export type Tracing = {
   enabled: boolean;
